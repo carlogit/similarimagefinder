@@ -10,7 +10,7 @@ import (
 	"github.com/carlogit/phash"
 )
 
-type result struct {
+type pathHashes struct {
 	path  string
 	sha1  string
 	phash string
@@ -27,7 +27,7 @@ func calculateSha1(reader io.Reader) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-func buildResult(filepath string) (*result, error) {
+func buildResult(filepath string) (*pathHashes, error) {
 	data, err := ioutil.ReadFile(filepath)
 	reader := bytes.NewReader(data)
 
@@ -43,5 +43,5 @@ func buildResult(filepath string) (*result, error) {
 		return nil, err
 	}
 
-	return &result{filepath, sha1Data, phashData}, nil
+	return &pathHashes{filepath, sha1Data, phashData}, nil
 }

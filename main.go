@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -11,70 +12,73 @@ import (
 	"github.com/carlogit/phash"
 )
 
-func calculateHashes(done <-chan struct{}, root string) (<-chan *result, <-chan error) {
-	// For each regular file, start a goroutine that calculates the file hashes and sends
-	// the result on c.  Send the result of the walk on errc.
-	c := make(chan *result)
-	errc := make(chan error, 1)
+const numDigesters = 20
+const threshold = 5
+
+func walkFiles(done <-chan struct{}, root string) <-chan string {
+	paths := make(chan string)
 	go func() {
-		var wg sync.WaitGroup
-		err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		defer close(paths)
+
+		filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				log.Println("cannot scan path %s, error: %d", path, err.Error())
 				return nil
 			}
-			if !info.Mode().IsRegular() || filepath.Ext(path) != "jpg" || filepath.Ext(path) != "jpg"){
+			if !info.Mode().IsRegular() || (filepath.Ext(path) != ".jpg" && filepath.Ext(path) != ".jpeg") {
 				return nil
 			}
-			wg.Add(1)
-			go func() {
-				result, err := buildResult(path)
-				if err != nil {
-					log.Println("cannot calculate hash for image %s, error: %d", path, err.Error())
-				} else {
-					select {
-					case c <- result:
-					case <-done:
-					}
-				}
-				wg.Done()
-			}()
-			// Abort the walk if done is closed.
 			select {
+			case paths <- path:
 			case <-done:
 				return errors.New("walk canceled")
-			default:
-				return nil
 			}
+			return nil
 		})
-		// Walk has returned, so all calls to wg.Add are done.  Start a
-		// goroutine to close c once all the sends are done.
-		go func() {
-			wg.Wait()
-			close(c)
-		}()
-		// No select needed here, since errc is buffered.
-		errc <- err
 	}()
-	return c, errc
+
+	return paths
 }
 
-func calculateAllHashes(root string) (map[string]*result, error) {
-	// MD5All closes the done channel when it returns; it may do so before
-	// receiving all the values from c and errc.
+func digester(done <-chan struct{}, paths <-chan string, c chan<- *pathHashes) {
+	for path := range paths {
+		result, err := buildResult(path)
+		if err == nil {
+			select {
+			case c <- result:
+			case <-done:
+				return
+			}
+		}
+	}
+}
+
+func calculateHashes(root string) map[string]*pathHashes {
 	done := make(chan struct{})
 	defer close(done)
 
-	c, errc := calculateHashes(done, root)
+	paths := walkFiles(done, root)
 
-	m := make(map[string]*result)
-	for r := range c {
-		m[r.path] = r
+	pathHashChan := make(chan *pathHashes)
+	var wg sync.WaitGroup
+	wg.Add(numDigesters)
+	for i := 0; i < numDigesters; i++ {
+		go func() {
+			digester(done, paths, pathHashChan)
+			wg.Done()
+		}()
 	}
-	if err := <-errc; err != nil {
-		return nil, err
+
+	go func() {
+		wg.Wait()
+		close(pathHashChan)
+	}()
+
+	mapPathHash := make(map[string]*pathHashes)
+	for pathHash := range pathHashChan {
+		mapPathHash[pathHash.path] = pathHash
 	}
-	return m, nil
+	return mapPathHash
 }
 
 type similarResult struct {
@@ -84,42 +88,61 @@ type similarResult struct {
 }
 
 func main() {
-	//	m, err := MD5All(os.Args[1])
-	m, err := calculateAllHashes("/home/carlo/Downloads/Camera/")
+	distanceThreshold := flag.Int("threshold", 5, "hamming distance to use for phash image similarity")
+	folderToScan := flag.String("folder", "", "absolute path for the folder to scan for image similarity")
+
+	flag.Parse()
+
+	mapPathHashes := calculateHashes(*folderToScan)
+	similarImagesMap := buildSimilarImagesMap(*distanceThreshold, mapPathHashes)
+
+	outputFile, err := os.Create("similarimgage.txt")
 	if err != nil {
-		fmt.Println(err)
+		log.Fatalln("cannot create output file: %s. Error: %s", "similarimgage.txt", err.Error())
 		return
 	}
+	defer outputFile.Close()
 
-	s := make(map[string]similarResult)
-	for key, value := range m {
-		same := make([]string, 0)
-		similar := make([]string, 0)
-		for key1, value1 := range m {
-			if key == key1 {
-				continue
-			}
-
-			if value.sha1 == value1.sha1 {
-				same = append(same, key1)
-			} else if phash.GetDistance(value.phash, value1.phash) <= 5 {
-				similar = append(similar, key1)
-			}
-		}
-
-		s[key] = similarResult{key, same, similar}
-	}
-
-	for key, value := range s {
-		fmt.Printf("image: %s\n", key)
+	for path, similarResult := range similarImagesMap {
+		outputFile.WriteString(path + "\n")
+		fmt.Printf("image: %s\n", path)
 		fmt.Printf("  same:\n")
-		for _, value1 := range value.same {
-			fmt.Printf("    %s\n", value1)
+		for _, sameImage := range similarResult.same {
+			fmt.Printf("    %s\n", sameImage)
+			outputFile.WriteString("  * " + sameImage + "\n")
 		}
 
 		fmt.Printf("  similar:\n")
-		for _, value2 := range value.similar {
-			fmt.Printf("    %s\n", value2)
+		for _, similarImage := range similarResult.similar {
+			fmt.Printf("    %s\n", similarImage)
+			outputFile.WriteString("  - " + similarImage + "\n")
 		}
+
+		outputFile.WriteString("\n")
 	}
+
+	outputFile.Sync()
+}
+
+func buildSimilarImagesMap(distanceThreshold int, mapPathHashes map[string]*pathHashes) map[string]similarResult {
+	similarImagesMap := make(map[string]similarResult)
+	for path, pathHashes := range mapPathHashes {
+		sameImage := make([]string, 0)
+		similarImage := make([]string, 0)
+		for otherPath, otherSimilarResult := range mapPathHashes {
+			if path == otherPath {
+				continue
+			}
+
+			if pathHashes.sha1 == otherSimilarResult.sha1 {
+				sameImage = append(sameImage, otherPath)
+			} else if phash.GetDistance(pathHashes.phash, otherSimilarResult.phash) <= distanceThreshold {
+				similarImage = append(similarImage, otherPath)
+			}
+		}
+
+		similarImagesMap[path] = similarResult{path, sameImage, similarImage}
+	}
+
+	return similarImagesMap
 }
