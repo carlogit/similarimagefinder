@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+
+<head>
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap.min.css">
+	<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.2.5/angular.min.js"></script>
+</head>
+<style>
+img {
+    max-width:450px;
+    height:auto;
+}
+.box:hover{
+background: #DCDCDC;
+}
+.spacer {
+	padding-left: 40px;
+}
+</style>
+<h2>Similar images</h2>
+<body ng-app='findImageDupsApp'>
+	<div ng-controller="SearchController" >
+		<div ng-repeat="image in images">
+		<table>
+			<tr class="row">
+				<td ng-repeat="similar in image" class="spacer">
+					<div class="box">
+						<button type="button" class="btn btn-link pull-right" ng-click="delete($parent.$index, $index)">Delete</button>
+						<br>
+						<img onerror="this.style.display = 'none'" src="{{similar}}"/>
+					</div>
+				</td>
+			</tr>
+		</table>
+		<p>
+		</div>
+	<div>
+
+	<script>
+	angular.module("findImageDupsApp", [])
+	    .controller("SearchController", function($scope) {
+	        $scope.images = [["/home/carlo/Downloads/Camera/IMG_20150412_152331529.jpg","/home/carlo/Downloads/Camera/IMG_20150412_152329908.jpg"],["/home/carlo/Downloads/Camera/IMG_20150512_200427794.jpg","/home/carlo/Downloads/Camera/IMG_20150512_200430068.jpg","/home/carlo/Downloads/Camera/IMG_20150512_200424394.jpg"]];
+			
+			$scope.delete = function(parentIndex, index) {
+  				$scope.images[parentIndex].splice(index, 1);
+			}
+	    } );
+	</script>
+
+</body>
+</html>
