@@ -6,7 +6,8 @@
 
 ## Steps on how to run it
 
-1. ./similarimagefinder -folder=\<specify_root_folder_containing_images\> -outFile=\<html_result_file\>
+1. Execute the command
+  * ./similarimagefinder -folder=\<specify_root_folder_containing_images\> -outFile=\<html_result_file\>
 2. Wait for message "Starting service on port", if no duplicate image has been found then application will exit.
 3. Open html file (the one defined using the parameter -outFile) in a web browser (like Chrome)
 4. Each row of images are a set of similar images detected by the application.
