@@ -49,7 +49,7 @@ background: #DCDCDC;
 	var app = angular.module("findImageDupsApp", []);
 
 	app.controller("SearchController", ["similarSrv", "$scope", function(similarSrv, $scope) {
-	        $scope.images = [["/home/carlo/Downloads/Camera/IMG_20150412_152331529.jpg","/home/carlo/Downloads/Camera/IMG_20150412_152329908.jpg"],["/home/carlo/Downloads/Camera/IMG_20150512_200430068.jpg","/home/carlo/Downloads/Camera/IMG_20150512_200427794.jpg"]];
+	        $scope.images = [["/home/carlo/Downloads/Camera/IMG_20150412_152329908.jpg","/home/carlo/Downloads/Camera/IMG_20150412_152332742.jpg","/home/carlo/Downloads/Camera/IMG_20150512_200430068.jpg","/home/carlo/Downloads/Camera/IMG_20150512_200432158.jpg","/home/carlo/Downloads/Camera/IMG_20150512_200427794.jpg","/home/carlo/Downloads/Camera/IMG_20150512_200424394.jpg","/home/carlo/Downloads/Camera/IMG_20150412_152331529.jpg"]];
 			
 			$scope.delete = function(parentIndex, index) {
 				var imgUrl = $scope.images[parentIndex][index];
@@ -74,7 +74,7 @@ background: #DCDCDC;
 	app.factory('similarSrv', function ($http) {
 	    return {
 	        getInformation: function (folderPathParam) {
-	            var url = 'http://localhost:8787/delete';
+	            var url = 'http://localhost:9559/delete';
 	            return $http.jsonp(url, {
 	                params: {
 	                    callback: 'JSON_CALLBACK',
